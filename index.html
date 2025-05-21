@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <title>Arvaa Kuka - Custom</title>
+  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+  
+</head>
+<body>
+
+  <h1>Arvaa Kuka?!?!?!?!??!?</h1>
+
+  <form id="upload-form">
+    <div id="inputs"></div>
+    <button type="button" onclick="generateGrid()">Luo ruudukko</button>
+  </form>
+
+  <div class="grid" id="grid-container"></div>
+
+  <script>
+    const inputCount = 24;
+
+    
+    window.onload = () => {
+      const inputs = document.getElementById('inputs');
+      for (let i = 0; i < inputCount; i++) {
+        const div = document.createElement('div');
+        div.innerHTML = `
+          <label>Henkilö ${i + 1}: 
+            <input type="text" placeholder="Nimi" id="name-${i}" required>
+            <input type="file" accept="image/*" id="image-${i}">
+          </label><br><br>
+        `;
+        inputs.appendChild(div);
+      }
+    };
+
+    function generateGrid() {
+        const container = document.getElementById('grid-container');
+        container.innerHTML = '';
+
+        const people = [];
+
+        for (let i = 0; i < inputCount; i++) {
+            const name = document.getElementById(`name-${i}`).value.trim();
+            const imageInput = document.getElementById(`image-${i}`);
+            const file = imageInput.files[0];
+
+            if (!name) {
+            alert(`Anna nimi henkilölle ${i + 1}`);
+            return;
+            }
+
+            people.push({ name, file });
+        }
+
+        
+        shuffleArray(people);
+
+        
+        people.forEach(person => {
+            if (person.file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                createCard(e.target.result, person.name, container);
+            };
+            reader.readAsDataURL(person.file);
+            } else {
+            createCard('mystery.jpg', person.name, container);
+            }
+        });
+        }
+
+
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
+
+    function createCard(imgSrc, name, container) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.onclick = () => card.classList.toggle('hidden'); 
+
+      card.innerHTML = `
+        <img src="${imgSrc}" alt="${name}">
+        <p>${name}</p>
+      `;
+      container.appendChild(card);
+    }
+  </script>
+
+</body>
+</html>
