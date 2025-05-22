@@ -5,6 +5,31 @@
   <title>Arvaa Kuka - Custom</title>
   <link rel="stylesheet" href="style.css">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
+    import { getFirestore, collection, doc, getDoc, addDoc } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDs9KzLEyEM2MdmPlhqmHHeJiFaJ7dg3T0",
+      authDomain: "arvaakuka-ecf25.firebaseapp.com",
+      projectId: "arvaakuka-ecf25",
+      storageBucket: "arvaakuka-ecf25.appspot.com",
+      messagingSenderId: "3775771050",
+      appId: "1:3775771050:web:d2e32a8ce58d066512fbd3",
+      measurementId: "G-0NMVB9TPGN"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Tee käytettäväksi muille skripteille
+    window.FIREBASE_DB = db;
+    window.FIREBASE_COLLECTION = collection(db, "games");
+    window.FIREBASE_DOC = doc;
+    window.FIREBASE_GET_DOC = getDoc;
+    window.FIREBASE_ADD_DOC = addDoc;
+  </script>
 </head>
 <body>
 
@@ -17,11 +42,15 @@
 
   <div class="grid" id="grid-container"></div>
 
-  <!-- Sinun henkilösi -kortti -->
   <div id="your-person-section" style="display:none; margin-top: 30px;">
     <h2>Sinun henkilösi:</h2>
     <div id="your-person-card" class="card" style="max-width: 200px; margin: 0 auto;"></div>
     <button id="toggle-person-btn" style="margin-top: 10px;">Piilota henkilösi</button>
+    <div id="share-link-box" style="margin-top: 20px; display: none;">
+    <h3>Jaa peli toiselle pelaajalle:</h3>
+    <input type="text" id="share-link" readonly style="width: 100%; padding: 8px;">
+  </div>
+
   </div>
 
   <script>
@@ -41,11 +70,59 @@
       }
     };
 
-    function generateGrid() {
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    function createCard(imgSrc, name, container) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.onclick = () => card.classList.toggle('hidden');
+      card.innerHTML = `
+        <img src="${imgSrc}" alt="${name}">
+        <p>${name}</p>
+      `;
+      container.appendChild(card);
+    }
+
+    function showYourPerson(imgSrc, name) {
+      const section = document.getElementById('your-person-section');
+      const card = document.getElementById('your-person-card');
+      const toggleBtn = document.getElementById('toggle-person-btn');
+
+      card.innerHTML = `<img src="${imgSrc}" alt="${name}"><p>${name}</p>`;
+      card.style.display = 'block';
+
+      section.style.display = 'block';
+      toggleBtn.textContent = 'Piilota henkilösi';
+
+      toggleBtn.onclick = () => {
+        const isHidden = card.style.display === 'none';
+        card.style.display = isHidden ? 'block' : 'none';
+        toggleBtn.textContent = isHidden ? 'Piilota henkilösi' : 'Näytä henkilösi';
+      };
+    }
+
+    function buildGridFromData(people) {
       const container = document.getElementById('grid-container');
       container.innerHTML = '';
       document.getElementById('your-person-section').style.display = 'none';
 
+      shuffleArray(people);
+
+      const yourPersonIndex = Math.floor(Math.random() * people.length);
+      people.forEach((person, index) => {
+        createCard(person.img, person.name, container);
+        if (index === yourPersonIndex) {
+          showYourPerson(person.img, person.name);
+        }
+      });
+    }
+
+    function generateGrid() {
       const people = [];
 
       for (let i = 0; i < inputCount; i++) {
@@ -61,8 +138,6 @@
         people.push({ name, file });
       }
 
-      shuffleArray(people);
-
       const loadPromises = people.map(person => {
         return new Promise(resolve => {
           if (person.file) {
@@ -73,61 +148,49 @@
             };
             reader.readAsDataURL(person.file);
           } else {
-            person.imgSrc = 'mystery.jpg';
+            person.imgSrc = "mystery.jpg";
             resolve();
           }
         });
       });
 
       Promise.all(loadPromises).then(() => {
-        // Satunnainen henkilö sinulle
-        const yourPersonIndex = Math.floor(Math.random() * people.length);
-        people.forEach((person, index) => {
-          createCard(person.imgSrc, person.name, container);
-          if (index === yourPersonIndex) {
-            showYourPerson(person.imgSrc, person.name);
-          }
+        const compacted = people.map(p => ({
+          name: p.name,
+          img: p.imgSrc
+        }));
+
+        window.FIREBASE_ADD_DOC(window.FIREBASE_COLLECTION, { people: compacted }).then(docRef => {
+          const url = `${window.location.origin}${window.location.pathname}?gameId=${docRef.id}`;
+          document.getElementById('share-link-box').style.display = 'block';
+          document.getElementById('share-link').value = url;
+
+          buildGridFromData(compacted);
+        }).catch(error => {
+          alert("Tallennus epäonnistui: " + error.message);
         });
       });
     }
 
-
-    function shuffleArray(array) {
-      for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
+    // Lataa peli URL-parametrista
+    window.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      const gameId = params.get('gameId');
+      if (gameId) {
+        const docRef = window.FIREBASE_DOC(window.FIREBASE_COLLECTION, gameId);
+        window.FIREBASE_GET_DOC(docRef).then(docSnap => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            buildGridFromData(data.people);
+            document.getElementById('upload-form').style.display = 'none';
+          } else {
+            alert("Peliä ei löytynyt!");
+          }
+        }).catch(error => {
+          alert("Virhe ladatessa peliä: " + error.message);
+        });
       }
-    }
-
-    function createCard(imgSrc, name, container) {
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.onclick = () => card.classList.toggle('hidden'); 
-      card.innerHTML = `
-        <img src="${imgSrc}" alt="${name}">
-        <p>${name}</p>
-      `;
-      container.appendChild(card);
-    }
-
-    function showYourPerson(imgSrc, name) {
-  const section = document.getElementById('your-person-section');
-  const card = document.getElementById('your-person-card');
-  const toggleBtn = document.getElementById('toggle-person-btn');
-
-  card.innerHTML = `<img src="${imgSrc}" alt="${name}"><p>${name}</p>`;
-  card.style.display = 'block';
-
-  section.style.display = 'block';
-  toggleBtn.textContent = 'Piilota henkilösi';
-
-  toggleBtn.onclick = () => {
-    const isHidden = card.style.display === 'none';
-    card.style.display = isHidden ? 'block' : 'none';
-    toggleBtn.textContent = isHidden ? 'Piilota henkilösi' : 'Näytä henkilösi';
-  };
-}
-
+    });
   </script>
 
 </body>
